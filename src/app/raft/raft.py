@@ -67,6 +67,41 @@ class RaftNode:
     def leader_hint(self) -> LeaderHint:
         return LeaderHint(self.leader_id, self.leader_url)
 
+    async def resolve_leader_url(self) -> str | None:
+        """Best-effort leader discovery for client request forwarding.
+
+        If this node is not a leader, we may still want to accept client write
+        requests and transparently forward them to the current leader.
+
+        Strategy:
+        1) Use the last known leader URL (from heartbeats/AppendEntries), if any.
+        2) Otherwise, probe peers' /raft/state and pick the one that reports
+           itself as leader.
+
+        Returns leader base URL like "http://node2:8000" or None if unknown.
+        """
+
+        # Fast path: we already know.
+        if self.leader_url:
+            return self.leader_url
+
+        # Probe peers. This is best-effort and should not block forever.
+        for peer in self.s.peers:
+            try:
+                r = await self._client.get(f"{peer}/raft/state")
+                if r.status_code != 200:
+                    continue
+                st = r.json()
+                if st.get("role") == "leader":
+                    # Cache for future forwards.
+                    self.leader_url = peer
+                    self.leader_id = st.get("node_id")
+                    return peer
+            except Exception:
+                continue
+
+        return None
+
     def _persist_now(self) -> None:
         st = PersistentState(
             current_term=self.current_term,

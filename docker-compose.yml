@@ -11,7 +11,9 @@ services:
     volumes:
       - node1_data:/data
     ports:
-      - "8001:8000"
+      # Single entrypoint: send client requests to http://localhost:8000
+      # Node1 will forward writes to the current leader when needed.
+      - "8000:8000"
 
   node2:
     build: .
@@ -41,7 +43,37 @@ services:
     ports:
       - "8003:8000"
 
+  node4:
+    build: .
+    container_name: node4
+    environment:
+      - NODE_ID=node4
+      - PORT=8000
+      - HOST=0.0.0.0
+      - PEERS=http://node1:8000,http://node2:8000,http://node3:8000
+      - DATA_DIR=/data
+    volumes:
+      - node4_data:/data
+    ports:
+      - "8004:8000"
+
+  node5:
+    build: .
+    container_name: node5
+    environment:
+      - NODE_ID=node5
+      - PORT=8000
+      - HOST=0.0.0.0
+      - PEERS=http://node1:8000,http://node2:8000,http://node3:8000,http://node4:8000
+      - DATA_DIR=/data
+    volumes:
+      - node4_data:/data
+    ports:
+      - "8005:8000"
+
 volumes:
   node1_data:
   node2_data:
   node3_data:
+  node4_data:
+  node5_data:
