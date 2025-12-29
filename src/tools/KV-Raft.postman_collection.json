@@ -1,0 +1,332 @@
+{
+	"info": {
+		"_postman_id": "832ef193-ffaf-46b0-9e2f-74c5881c84cd",
+		"name": "KV-Raft",
+		"description": "Коллекция для ручного тестирования KV поверх Raft. Используй окружение KV-Raft Local (ports 8001..8005).",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "40455690"
+	},
+	"item": [
+		{
+			"name": "KV (клиентские операции)",
+			"item": [
+				{
+					"name": "PUT key/value",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"value\": \"{{value}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/kv/{{key}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"kv",
+								"{{key}}"
+							]
+						},
+						"description": "PUT key/value"
+					},
+					"response": []
+				},
+				{
+					"name": "GET key",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/kv/{{key}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"kv",
+								"{{key}}"
+							]
+						},
+						"description": "GET key"
+					},
+					"response": []
+				},
+				{
+					"name": "DELETE key",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/kv/{{key}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"kv",
+								"{{key}}"
+							]
+						},
+						"description": "DELETE key"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Raft states",
+			"item": [
+				{
+					"name": "/raft/log — срез лога",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/raft/log?from={{log_from}}&to={{log_to}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"raft",
+								"log"
+							],
+							"query": [
+								{
+									"key": "from",
+									"value": "{{log_from}}"
+								},
+								{
+									"key": "to",
+									"value": "{{log_to}}"
+								}
+							]
+						},
+						"description": "/raft/log — срез лога"
+					},
+					"response": []
+				},
+				{
+					"name": "/raft/state — состояние",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/raft/state",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"raft",
+								"state"
+							]
+						},
+						"description": "/raft/state — расширенное состояние"
+					},
+					"response": []
+				},
+				{
+					"name": "metrics",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/metrics",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"metrics"
+							]
+						},
+						"description": "Prometheus metrics"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "RPC (внутрянка, только для дебага, уже выключено))",
+			"item": [
+				{
+					"name": "RequestVote RPC (ручной вызов)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Sender",
+								"value": "{{sender_url}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"term\": \"{{term}}\",\n  \"candidate_id\": \"{{candidate_id}}\",\n  \"last_log_index\": \"{{last_log_index}}\",\n  \"last_log_term\": \"{{last_log_term}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/raft/request_vote",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"raft",
+								"request_vote"
+							]
+						},
+						"description": "RequestVote RPC (ручной вызов)"
+					},
+					"response": []
+				},
+				{
+					"name": "AppendEntries RPC (manual)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Sender",
+								"value": "{{sender_url}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"term\": \"{{term}}\",\n  \"leader_id\": \"{{leader_id}}\",\n  \"prev_log_index\": \"{{prev_log_index}}\",\n  \"prev_log_term\": \"{{prev_log_term}}\",\n  \"entries\": [],\n  \"leader_commit\": \"{{leader_commit}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/raft/append_entries",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"raft",
+								"append_entries"
+							]
+						},
+						"description": "AppendEntries RPC (manual)"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Быстрые проверки",
+			"item": [
+				{
+					"name": "1",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8001/raft/state",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8001",
+							"path": [
+								"raft",
+								"state"
+							]
+						},
+						"description": "/raft/state — расширенное состояние"
+					},
+					"response": []
+				},
+				{
+					"name": "2",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8002/raft/state",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8002",
+							"path": [
+								"raft",
+								"state"
+							]
+						},
+						"description": "/raft/state — расширенное состояние"
+					},
+					"response": []
+				},
+				{
+					"name": "3",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8003/raft/state",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8003",
+							"path": [
+								"raft",
+								"state"
+							]
+						},
+						"description": "/raft/state — расширенное состояние"
+					},
+					"response": []
+				},
+				{
+					"name": "4",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8004/raft/state",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8004",
+							"path": [
+								"raft",
+								"state"
+							]
+						},
+						"description": "/raft/state — расширенное состояние"
+					},
+					"response": []
+				},
+				{
+					"name": "5",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8005/raft/state",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8005",
+							"path": [
+								"raft",
+								"state"
+							]
+						},
+						"description": "/raft/state — расширенное состояние"
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}
