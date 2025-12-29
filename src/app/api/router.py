@@ -70,7 +70,6 @@ def build_router(node: RaftNode) -> APIRouter:
 
         dt_ms = (time.perf_counter() - t0) * 1000
 
-        # Пробрасываем ответ лидера как есть.
         try:
             payload = resp.json()
         except Exception:

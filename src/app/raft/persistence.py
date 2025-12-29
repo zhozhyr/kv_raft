@@ -82,7 +82,7 @@ class Persistence:
             for e in entries:
                 f.write(json.dumps(e.model_dump(), ensure_ascii=False) + "\n")
             f.flush()
-            os.fsync(f.fileno())  # "реально" на диск (можно убрать ради скорости, но пусть будет)
+            os.fsync(f.fileno())
 
     def rewrite_log(self, full_log: list[LogEntry]) -> None:
         """
