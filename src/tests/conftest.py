@@ -30,8 +30,6 @@ def _run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
 
 
 def _compose_cmd() -> list[str]:
-    # allow override, but default is good for most setups
-    # e.g. export DOCKER_COMPOSE="docker compose"
     raw = os.environ.get("DOCKER_COMPOSE", "docker compose")
     return raw.split()
 
@@ -128,9 +126,6 @@ async def kv_get(client: httpx.AsyncClient, base: str, key: str) -> httpx.Respon
     return await client.get(f"{base}/kv/{key}")
 
 async def kv_get_maybe(client: httpx.AsyncClient, base: str, key: str) -> dict | None:
-    """
-    GET value; return parsed JSON on 200, None if node unreachable or not found.
-    """
     try:
         r = await client.get(f"{base}/kv/{key}")
     except Exception:

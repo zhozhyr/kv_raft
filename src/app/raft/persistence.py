@@ -28,9 +28,6 @@ class Persistence:
     Хранение Raft состояния в двух файлах:
       - meta.json  (атомарно): term/vote/commit_index
       - wal.jsonl  (append-only): log entries, по одной JSON-строке на запись
-
-    Важно: при обрезке лога (conflict) WAL пересобирается (rewrite).
-    Это норм для курсового проекта.
     """
 
     def __init__(self, data_dir: Path):

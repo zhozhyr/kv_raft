@@ -15,8 +15,6 @@ from .conftest import (
 
 
 def _container_name_from_url(base: str) -> str:
-    # our compose exposes:
-    # node1 -> localhost:8001, node2 -> 8002, node3 -> 8003
     if base.endswith(":8001"):
         return "node1"
     if base.endswith(":8002"):
@@ -40,11 +38,9 @@ async def test_leader_failover_keeps_committed_data(client, cluster: Cluster, co
     assert r.status_code == 200, r.text
 
     leader_container = _container_name_from_url(leader_base)
-    # stop leader
     compose(["stop", leader_container])
 
     try:
-        # wait new leader among remaining nodes (may take couple seconds)
         async def _has_new_leader():
             try:
                 lb, st = await wait_for_single_leader_tolerant(client, cluster, timeout=2.0, min_reachable=2)
@@ -54,7 +50,6 @@ async def test_leader_failover_keeps_committed_data(client, cluster: Cluster, co
 
         await wait_until(_has_new_leader, timeout=12.0, desc="new leader elected")
 
-        # data must still be readable from alive nodes (may include old leader down)
         async def _read_from_any_alive():
             ok = 0
             for n in cluster.nodes:
@@ -66,8 +61,6 @@ async def test_leader_failover_keeps_committed_data(client, cluster: Cluster, co
 
         await wait_until(_read_from_any_alive, timeout=8.0, desc="committed data available after failover")
     finally:
-        # bring it back for subsequent tests
         compose(["start", leader_container])
 
-        # allow it to rejoin
         await wait_for_single_leader(client, cluster)

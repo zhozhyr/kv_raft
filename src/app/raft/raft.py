@@ -14,7 +14,7 @@ import httpx
 logger = logging.getLogger("raft")
 
 from app.core.config import Settings
-from .persistence import Persistence, PersistentState
+from .persistence import Persistence
 from .types import (
     AppendEntriesRequest,
     AppendEntriesResponse,
@@ -82,7 +82,6 @@ class RaftNode:
         return LeaderHint(self.leader_id, self.leader_url)
 
     async def resolve_leader_url(self) -> str | None:
-        # 1) validate cached leader
         if self.leader_url:
             try:
                 r = await self._client.get(f"{self.leader_url}/raft/state")
@@ -93,7 +92,6 @@ class RaftNode:
             self.leader_url = None
             self.leader_id = None
 
-        # 2) probe peers in parallel
         async def probe(peer: str):
             try:
                 r = await self._client.get(f"{peer}/raft/state")
@@ -132,12 +130,10 @@ class RaftNode:
         return random.uniform(self.s.election_timeout_min, self.s.election_timeout_max)
 
     async def start_background_tasks(self) -> None:
-        # Rebuild state machine from persisted log/commitIndex.
         if self.commit_index >= 0:
             logger.info(f"replay applied entries up to commit_index={self.commit_index} node={self.s.node_id}")
         self._apply_task = asyncio.create_task(self._apply_loop(), name="apply_loop")
         self._election_task = asyncio.create_task(self._election_loop(), name="election_loop")
-        # Kick apply loop once on startup.
         self._apply_event.set()
 
     async def _election_loop(self) -> None:
@@ -249,10 +245,6 @@ class RaftNode:
             return
 
     async def _broadcast_commit_index(self) -> None:
-        """
-        After leader advances commit_index, immediately notify followers
-        so they can apply committed entries (crucial for failover correctness).
-        """
         async with self._lock:
             if self.role != "leader":
                 return
@@ -350,7 +342,6 @@ class RaftNode:
 
         await asyncio.gather(*(replicate_to(p) for p in self.s.peers))
 
-        # try advance commit_index (majority match_index)
         advanced = False
         async with self._lock:
             if self.role != "leader":
@@ -361,7 +352,6 @@ class RaftNode:
             quorum = (len(self.s.peers) + 1) // 2 + 1
             N = match[-quorum]
 
-            # Only commit entries from current term (Raft safety rule)
             if N > self.commit_index and N >= 0 and self.log[N].term == self.current_term:
                 old_ci = self.commit_index
                 self.commit_index = N
@@ -376,21 +366,11 @@ class RaftNode:
             await self._broadcast_commit_index()
 
     async def _apply_loop(self) -> None:
-        """Применяет committed-записи лога к state machine (KV).
-
-        Разделение ответственности (Raft):
-        - commitIndex меняется только модулем консенсуса;
-        - lastApplied двигается только здесь;
-        - state machine мутируется только здесь.
-
-        Цикл event-driven: при изменении commitIndex выставляется _apply_event.
-        """
         try:
             while not self._stop.is_set():
                 await self._apply_event.wait()
                 self._apply_event.clear()
 
-                # Apply as much as we can in one go.
                 while True:
                     async with self._lock:
                         if self.last_applied >= self.commit_index:
@@ -399,8 +379,6 @@ class RaftNode:
                         idx = self.last_applied
                         entry = self.log[idx]
 
-                    # Apply outside the lock would be nice, but our state machine is
-                    # an in-memory dict and tests expect simple semantics; keep it simple.
                     async with self._lock:
                         if entry.command == "put":
                             assert entry.value is not None
@@ -410,21 +388,15 @@ class RaftNode:
 
                         logger.info(f"apply_index term={self.current_term} node={self.s.node_id} idx={idx}")
 
-                        # Wake any propose() waiters.
                         fut = self._commit_waiters.pop(idx, None)
                         if fut and not fut.done():
                             fut.set_result(None)
 
-                        # Persist *Raft state* (term/vote/log/commitIndex). lastApplied is volatile.
                         self._persist_meta_now()
         except asyncio.CancelledError:
             return
 
     def _notify_commit_waiters_locked(self) -> None:
-        """Complete any commit waiters whose index is now committed.
-
-        Must be called under self._lock.
-        """
         ready = [i for i in self._commit_waiters.keys() if i <= self.commit_index]
         for i in ready:
             fut = self._commit_waiters.pop(i, None)
@@ -432,9 +404,7 @@ class RaftNode:
                 fut.set_result(None)
 
 
-    # ---------- RPC handlers ----------
-
-
+    # RPC handlers
     async def on_request_vote(self, req: RequestVoteRequest, sender_url: str | None) -> RequestVoteResponse:
         async with self._lock:
             if req.term < self.current_term:
@@ -476,7 +446,6 @@ class RaftNode:
             self._last_heartbeat = time.monotonic()
             self._cur_timeout = self._election_timeout()
 
-            # consistency check
             if req.prev_log_index >= 0:
                 if req.prev_log_index >= len(self.log):
                     return AppendEntriesResponse(
@@ -509,7 +478,6 @@ class RaftNode:
                     new_entries.append(e)
                 idx += 1
 
-            # persistence
             if truncated:
                 # если резали хвост, проще и надёжнее пересобрать WAL целиком
                 self.persist.rewrite_log(self.log)
@@ -527,14 +495,9 @@ class RaftNode:
         self._apply_event.set()
         return AppendEntriesResponse(term=self.current_term, success=True)
 
-    # ---------- Client-facing operations (leader only) ----------
+    # Клиентские операции (только лидер)
 
     async def propose(self, entry: LogEntry) -> bool:
-        """Реплицирует команду клиента через Raft и ждёт коммита большинством.
-
-        Возвращает True только когда индекс записи стал committed (commitIndex продвинут
-        на кворуме). Возвращает False при таймауте или потере лидерства.
-        """
         async with self._lock:
             if self.role != "leader":
                 return False
@@ -566,13 +529,6 @@ class RaftNode:
             return False
 
     async def get_value(self, key: str) -> Optional[str]:
-        """
-        Чтение (только на лидере).
-
-        Перед тем как отдать значение, лидер подтверждает лидерство в текущем term
-        через heartbeat-ACK от большинства (минимальный ReadIndex).
-        Это защищает от "устаревших" чтений после потери лидерства.
-        """
         async with self._lock:
             if self.role != "leader":
                 return None
@@ -597,7 +553,6 @@ class RaftNode:
 
 
     async def _confirm_leadership(self, term: int) -> bool:
-        """Подтверждает, что этот узел *всё ещё лидер* в заданном term."""
         async with self._lock:
             if self.role != "leader" or self.current_term != term:
                 return False
@@ -683,11 +638,6 @@ class RaftNode:
         return base
 
     async def _detect_active_peers(self, peers: list[str]) -> list[str]:
-        """
-        Возвращает peers, которые сейчас отвечают на /health.
-
-        Используется только для наблюдаемости в /raft/state.
-        """
         if not peers:
             return []
         timeout_s = min(0.3, max(0.05, self.s.rpc_timeout * 0.25))
@@ -710,7 +660,6 @@ class RaftNode:
 
 
     async def debug_log(self, frm: int = 0, to: int | None = None) -> list[dict]:
-        """Возвращает срез лога для отладки (/raft/log)."""
         async with self._lock:
             if frm < 0:
                 frm = 0

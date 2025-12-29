@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Снять сетевые деградации и разделения, созданные netem.sh/partition.sh.
-# В контейнерах проекта безопасно очищать INPUT/OUTPUT, потому что дополнительных
-# правил там нет.
+# Снять сетевые разделения, созданные partition.sh.
 
 DC=${DOCKER_COMPOSE:-"docker compose"}
 
@@ -32,11 +30,7 @@ for n in "${ALL_NODES[@]}"; do
   alive+=("$n")
   echo "[NODE] $n"
 
-  # tc netem
-  echo "  [TC]   delete qdisc root on eth0"
-  $DC exec -T "$n" sh -lc 'tc qdisc del dev eth0 root 2>/dev/null || true'
-
-  # iptables (очищаем цепочки)
+  # iptables
   echo "  [IPT]  flush INPUT/OUTPUT"
   $DC exec -T "$n" sh -lc 'iptables -F INPUT  2>/dev/null || true; iptables -F OUTPUT 2>/dev/null || true'
 

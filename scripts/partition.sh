@@ -4,8 +4,6 @@ set -euo pipefail
 # Сетевые разделения (partition) и blackhole через iptables внутри контейнеров.
 #
 # Примеры:
-#   ./scripts/partition.sh minority node1            # node1 изолирован, node2+node3 общаются
-#   ./scripts/partition.sh isolate node2             # node2 не видит никого и никто не видит node2
 #   ./scripts/partition.sh split node1 node2         # split: {node1,node2} | {node3}
 #
 # Снятие правил:
@@ -51,48 +49,6 @@ print_ips() {
 ALL_NODES=($($DC ps --services | grep '^node'))
 
 print_ips
-
-if [[ "$mode" == "isolate" ]]; then
-  node=${2:-}
-  [[ -z "$node" ]] && { echo "[ERROR] usage: $0 isolate <nodeX>" >&2; exit 2; }
-
-  echo "[ACTION] isolate single node"
-  echo "  isolated node : {$node}"
-  echo "  rest of cluster: {${ALL_NODES[*]}}"
-
-  for other in "${ALL_NODES[@]}"; do
-    [[ "$other" == "$node" ]] && continue
-    _drop_pair "$node" "$other"
-    _drop_pair "$other" "$node"
-  done
-
-  echo "[DONE] node '$node' is fully isolated from the cluster"
-  exit 0
-fi
-
-if [[ "$mode" == "minority" ]]; then
-  leader=${2:-}
-  [[ -z "$leader" ]] && { echo "[ERROR] usage: $0 minority <nodeX>" >&2; exit 2; }
-
-  GROUP_A=("$leader")
-  GROUP_B=()
-
-  for n in "${ALL_NODES[@]}"; do
-    [[ "$n" != "$leader" ]] && GROUP_B+=("$n")
-  done
-
-  echo "[ACTION] force minority"
-  echo "  minority group : {${GROUP_A[*]}}"
-  echo "  majority group : {${GROUP_B[*]}}"
-
-  for other in "${GROUP_B[@]}"; do
-    _drop_pair "$leader" "$other"
-    _drop_pair "$other" "$leader"
-  done
-
-  echo "[DONE] node '$leader' is now isolated in minority"
-  exit 0
-fi
 
 if [[ "$mode" == "split" ]]; then
   a=${2:-}
